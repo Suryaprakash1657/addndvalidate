@@ -1,54 +1,110 @@
 const express = require('express');
-const mongoose=require('mongoose');
-const bcrypt= require('bcrypt');
-const Schema= require('./Schema.js')
-const cors=require('cors');
+const mongoose = require('mongoose');
+const cors = require('cors');
+const chalk = require('chalk');
 require('dotenv').config();
+
 const app = express();
-const port = 3010;
+const port = process.env.PORT || 5000;
+const MONGO_URL = process.env.MONGOURL;
+
 app.use(express.json());
 app.use(cors());
-const MONGO_URL=process.env.MONGOURL
 
-const DB = async() => {
-    await mongoose.connect(MONGO_URL)
-    .then(res => console.log('DB connected Successfully'))
-    .catch(e => console.log('Try Again DB is Not connected'))
-}
+
+const DB = async () => {
+    try {
+        await mongoose.connect(MONGO_URL);
+        console.log(chalk.blue('DB connected Successfully'));
+    } catch (error) {
+        console.log(chalk.red(' Try Again, DB is Not connected', error));
+    }
+};
 DB();
 
-app.get('/Info',(req,res) => {
-    res.send('this Is Adding and validation Assignment 1');
-})
 
-app.post('/User', async(req,res) => {
-    const {Username,mail,password} = req.body;
+const User = require('./Schema');  
+
+app.get('/Info', (req, res) => {
+    res.send('This is Adding and Validation Assignment 1');
+});
+
+app.post('/User', async (req, res) => {
+    const { Username, mail, password } = req.body;
+
     try {
-
-        if(!Username || !mail || !password){
-            return res.status(400).json(({
-                message:"All fields are required"
-            }))
+        if (!Username || !mail || !password) {
+            return res.status(400).json({ message: "All fields are required" });
         }
-        const hashedpass= await bcrypt.hash(password, 10);
 
-        const newUser = new Schema({Username,mail,password: hashedpass});
+        const existingUser = await User.findOne({ mail });
+        if (existingUser) {
+            return res.status(400).json({ message: "User already exists" });
+        }
+
+
+        const newUser = new User({ Username, mail, password });
         await newUser.save();
 
-        return res.status(200).json(({
-            message : "User Successfully Added to the system",
-            User : newUser
-        }))
+        return res.status(201).json({
+            message: "User Successfully Registered",
+            User: { Username, mail } 
+        });
 
+    } catch (error) {
+        return res.status(500).json({
+            message: "Something went wrong",
+            error: error.message
+        });
+    }
+});
+
+// Checking And Matching Users Login Password
+app.post('/login/auth', async(req,res) => {
+
+    const {mail,password} = req.body;
+
+    try {
+        if(!mail || !password){
+            return res.status(400).json({
+                message : "All fields are required"
+            })
+
+        }
+        
+
+        //Check if User exists
+
+        const FindUser = await User.findOne({mail});
+
+        if(!FindUser){
+            return res.status(400).json({message : "User not exists",
+            })
+        }
+        
+        const match = await FindUser.ComparePass(password);
+
+
+        if(FindUser && !match){
+            return res.status(400).json({
+                message : "Invalid Password or Password didnt matched"
+            })
+        }
+        else{
+            return res.status(201).json({
+                message : "Password Matched",
+                User : FindUser
+            })
+        }
         
     } catch (error) {
-        return res.status(400).json({
-            message : "User not found or Invalid data",
+
+        return res.status(400).json({message : "Something went wrong",
             error : error.message
-        });
+        })
     }
 })
 
 app.listen(port, () => {
-  console.log(`Example app listening at http://localhost:${port}`);
+    console.log(chalk.blue(`Server is running at http://localhost:${port}`));
 });
